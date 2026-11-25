@@ -648,6 +648,8 @@ function renderLanes() {
     lane.children[3].textContent = state === "done" ? `All ${total} in` : `${done} / ${total} finished`;
   });
 }
+// Race time to the millisecond, the reader's own resolution.
+const fmtMs = ms => { const t = Math.max(0, Math.round(ms)); return `${fmt(t)}.${pad(t % 1000, 3)}`; };
 const fmt = ms => { const s = Math.max(0, Math.floor(ms / 1000)); return `${pad(Math.floor(s / 3600))}:${pad(Math.floor(s / 60) % 60)}:${pad(s % 60)}`; };
 
 function paceSeconds(text, fallback) {
@@ -711,7 +713,7 @@ function addRow(ev, status, cls) {
   if (tbody.querySelector(".empty")) tbody.innerHTML = "";
   const tr = document.createElement("tr");
   const race = ev.who.race == null ? null : plannedRaces[ev.who.race];
-  const cells = [race ? race.name : "", fmt(ev.at - (race ? race.offset : 0)), ev.who.bib, ev.who.name, ev.who.tag, ev.what, status];
+  const cells = [race ? race.name : "", fmtMs(ev.at - (race ? race.offset : 0)), ev.who.bib, ev.who.name, ev.who.tag, ev.what, status];
   cells.forEach((c, i) => { const td = document.createElement("td"); td.textContent = c; if (i === 4) td.className = "tag"; if (i === 6) td.className = cls; tr.appendChild(td); });
   tbody.prepend(tr);
   return tr.lastChild;
