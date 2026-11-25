@@ -98,17 +98,11 @@ td.tag { font-family: Consolas, "Courier New", monospace; font-size: 13px; }
   font: 13px/1.45 Consolas, "Courier New", monospace; white-space: pre-wrap; color: var(--chalk-dim); }
 .btn.danger { color: var(--bad); }
 .btn.danger:hover { border-color: var(--bad); }
-body { padding-bottom: 56px; }
-body.log-open { padding-bottom: calc(38vh + 68px); }
-html { scroll-padding-bottom: 64px; }
-html:has(body.log-open) { scroll-padding-bottom: calc(38vh + 76px); }
-.actions { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; background: var(--asphalt-2); border-top: 3px solid var(--banner); box-shadow: 0 -4px 14px rgba(0,0,0,.25); }
-.actions-bar { display: flex; align-items: center; gap: 12px; padding: 8px clamp(16px, 3vw, 32px); }
-.actions-bar .last { flex: 1; min-width: 0; font: 14px/1.4 Consolas, "Courier New", monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.actions-bar .last.flash { color: var(--banner); }
-.actions .log { display: none; height: 38vh; margin: 0 clamp(16px, 3vw, 32px) 12px; }
-.actions[data-open="true"] .log { display: block; }
-@media (prefers-reduced-motion: no-preference) { .go { transition: background .2s; } .actions-bar .last { transition: color .6s; } }
+.race-panel { position: sticky; top: 12px; max-height: calc(100vh - 24px); overflow: auto; }
+.race-panel .feed-wrap { max-height: 38vh; }
+.race-panel .log { height: 26vh; }
+@media (max-width: 860px) { .race-panel { position: static; max-height: none; overflow: visible; } }
+@media (prefers-reduced-motion: no-preference) { .go { transition: background .2s; } }
 </style>
 </head>
 <body>
@@ -201,7 +195,7 @@ html:has(body.log-open) { scroll-padding-bottom: calc(38vh + 76px); }
     </fieldset>
   </section>
 
-  <section aria-label="Race">
+  <section aria-label="Race" class="race-panel">
     <div class="tally">
       <div><b id="tFinished">0</b><span>crossings sent</span></div>
       <div><b id="tConfirmed">0</b><span>packets confirmed</span></div>
@@ -217,16 +211,12 @@ html:has(body.log-open) { scroll-padding-bottom: calc(38vh + 76px); }
         <tbody id="feed"><tr><td class="empty" colspan="6">Nobody has finished yet. Create runners, import them into ScoreHound, then start both races together.</td></tr></tbody>
       </table>
     </div>
+
+    <h2>Log</h2>
+    <pre class="log" id="log" aria-live="polite"></pre>
   </section>
 </main>
 
-<div class="actions" id="actions" data-open="false">
-  <div class="actions-bar">
-    <span class="last" id="lastAction" aria-live="polite">No actions yet.</span>
-    <button class="btn" id="logToggle" aria-expanded="false" aria-controls="log">Show log</button>
-  </div>
-  <pre class="log" id="log"></pre>
-</div>
 
 <script>
 "use strict";
@@ -267,17 +257,8 @@ function log(text) {
   const t = new Date().toLocaleTimeString();
   const el = $("log");
   el.textContent = `${t}  ${text}\n` + el.textContent;
-  const last = $("lastAction");
-  last.textContent = `${t}  ${text}`; last.title = text;
-  last.classList.add("flash"); clearTimeout(log.flash); log.flash = setTimeout(() => last.classList.remove("flash"), 1500);
+  el.scrollTop = 0;
 }
-$("logToggle").addEventListener("click", () => {
-  const open = $("actions").dataset.open !== "true";
-  $("actions").dataset.open = String(open);
-  document.body.classList.toggle("log-open", open);
-  $("logToggle").textContent = open ? "Hide log" : "Show log";
-  $("logToggle").setAttribute("aria-expanded", String(open));
-});
 
 // ---------- reader packet format and hash (same as the Worker) ----------
 const MULT = 19820704817n, SEED = 12090758597n, MASK = (1n << 64n) - 1n;
