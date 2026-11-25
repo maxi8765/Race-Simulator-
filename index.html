@@ -32,7 +32,8 @@
   }
 }
 * { box-sizing: border-box; }
-html, body { margin: 0; height: 100%; }
+html, body { margin: 0; }
+body { min-height: 100vh; }
 body { background: var(--asphalt); color: var(--chalk); font: 15px/1.5 var(--body); }
 button, input, select { font: inherit; color: inherit; }
 :focus-visible { outline: 2px solid var(--banner); outline-offset: 2px; }
@@ -83,8 +84,12 @@ legend { font: 700 17px/1 var(--cond); padding: 0 6px; }
 .tally div { background: var(--asphalt-2); padding: 10px 14px; }
 .tally b { display: block; font: 700 30px/1.1 var(--cond); font-variant-numeric: tabular-nums; }
 .tally span { font-size: 13px; color: var(--chalk-dim); }
-.monitor { display: flex; align-items: center; gap: 8px; margin: 14px 0 6px; font-size: 14px; }
-.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--chalk-dim); flex: none; }
+.monitor { display: flex; align-items: center; gap: 10px; margin: 14px 0 6px; padding: 10px 14px; font: 600 16px/1.3 var(--body);
+  border: 1px solid var(--line); border-left: 6px solid var(--chalk-dim); border-radius: 8px; background: var(--asphalt-2); }
+.monitor[data-state="ok"] { border-left-color: var(--ok); }
+.monitor[data-state="bad"] { border-left-color: var(--bad); }
+.monitor[data-state="wait"] { border-left-color: var(--banner); }
+.dot { width: 14px; height: 14px; border-radius: 50%; background: var(--chalk-dim); flex: none; }
 .dot.ok { background: var(--ok); } .dot.bad { background: var(--bad); } .dot.wait { background: var(--banner); }
 
 h2 { font: 700 20px/1.1 var(--cond); margin: 22px 0 8px; }
@@ -131,10 +136,13 @@ label.btn { display: inline-block; }
 .btn.danger { color: var(--bad); }
 .btn.danger:hover { border-color: var(--bad); }
 /* Race panel stays on screen while the settings scroll, so every button's result is visible */
-.race-panel { position: sticky; top: 12px; max-height: calc(100vh - 24px); overflow: auto; }
+/* Header stays at the top; the race panel sits just under it */
+.banner { position: sticky; top: 0; z-index: 20; }
+html { scroll-padding-top: calc(var(--head-h, 0px) + 12px); }
+.race-panel { position: sticky; top: calc(var(--head-h, 0px) + 12px); max-height: calc(100vh - var(--head-h, 0px) - 24px); overflow: auto; }
 .race-panel .feed-wrap { max-height: 38vh; }
 .race-panel .log { height: 26vh; }
-@media (max-width: 860px) { .race-panel { position: static; max-height: none; overflow: visible; } }
+@media (max-width: 860px) { .race-panel { position: static; max-height: none; overflow: visible; } .banner { position: static; } html { scroll-padding-top: 0; } }
 @media (prefers-reduced-motion: no-preference) { .go { transition: background .2s; } }
 </style>
 </head>
@@ -256,7 +264,7 @@ label.btn { display: inline-block; }
       <div><b id="tFailed">0</b><span>packets not seen</span></div>
     </div>
     <div class="lanes" id="lanes" aria-label="Races"></div>
-    <div class="monitor"><span class="dot" id="monDot"></span><span id="monText">Cloud check not connected</span></div>
+    <div class="monitor" id="monitor"><span class="dot" id="monDot"></span><span id="monText">Cloud check: not connected</span></div>
 
     <h2>Finish line</h2>
     <div class="feed-wrap">
@@ -406,7 +414,11 @@ async function sendPacket(rawTimes, rows = []) {
 let ws = null, wsWanted = false, wsRetry = null, monitorOk = false;
 function setMonitor(state, text) {
   monitorOk = state === "ok";
-  $("monDot").className = "dot " + state; $("monText").textContent = text;
+  $("monDot").className = "dot " + state;
+  const full = "Cloud check: " + text;
+  // Log changes, but not the "connecting" step between retries, so a dead link does not flood the log.
+  if (full !== setMonitor.logged && state !== "wait") { log(full); setMonitor.logged = full; }
+  $("monText").textContent = full; $("monitor").dataset.state = state;
 }
 function whenMonitorReady(cb) {
   const until = Date.now() + 6000;
@@ -416,10 +428,10 @@ function connectMonitor() {
   wsWanted = true;
   if (ws) return;
   const password = read("appPassword") || read("hashKey");
-  if (!password) { setMonitor("bad", "Cloud check needs the hash key or app password"); return; }
-  if (!read("companyId")) { setMonitor("bad", "Cloud check needs the company ID"); return; }
+  if (!password) { setMonitor("bad", "needs the hash key or app password"); return; }
+  if (!read("companyId")) { setMonitor("bad", "needs the company ID"); return; }
   const url = read("server").replace(/^http/, "ws").replace(/\/+$/, "");
-  setMonitor("wait", "Connecting cloud check");
+  setMonitor("wait", "connecting");
   const sock = new WebSocket(url);
   ws = sock;
   sock.onopen = () => sock.send(JSON.stringify({ action: "command", data: {
@@ -427,8 +439,8 @@ function connectMonitor() {
     companyId: read("companyId"), password } }));
   sock.onmessage = e => {
     let d; try { d = JSON.parse(e.data); } catch { return; }
-    if (d.Type === "SUBSCRIBE_OK") { setMonitor("ok", `Cloud check connected to ${read("readerName")}`); return; }
-    if (d.Type === "SUBSCRIBE_FAIL") { setMonitor("bad", `Cloud check rejected: ${d.reason || "check company ID and password"}`); wsWanted = false; sock.close(); return; }
+    if (d.Type === "SUBSCRIBE_OK") { setMonitor("ok", `connected to ${read("readerName")}. Sent packets will show Confirmed.`); return; }
+    if (d.Type === "SUBSCRIBE_FAIL") { setMonitor("bad", `rejected (${d.reason || "wrong company ID or app password"}). Packets cannot be confirmed.`); wsWanted = false; sock.close(); return; }
     if (!Array.isArray(d.RawTimes)) return;
     const p = pending.get(String(d.RandomNum));
     if (!p) return;
@@ -438,13 +450,13 @@ function connectMonitor() {
   };
   sock.onclose = () => {
     if (ws === sock) ws = null;
-    if (!wsWanted) { setMonitor("", "Cloud check not connected"); return; }
-    setMonitor("bad", "Cloud check dropped, reconnecting");
+    if (!wsWanted) { setMonitor("", "not connected"); return; }
+    setMonitor("bad", "cannot reach the cloud server, retrying. Check the Cloud server address.");
     clearTimeout(wsRetry); wsRetry = setTimeout(connectMonitor, 3000);
   };
   sock.onerror = () => {};
 }
-function resetMonitor() { wsWanted = false; if (ws) { const s = ws; ws = null; s.close(); } setMonitor("", "Cloud check not connected"); }
+function resetMonitor() { wsWanted = false; if (ws) { const s = ws; ws = null; s.close(); } setMonitor("", "not connected"); }
 ["readerName", "companyId", "hashKey", "appPassword", "server"].forEach(f => $(f).addEventListener("change", () => { resetMonitor(); }));
 
 // ---------- runners ----------
@@ -936,6 +948,10 @@ $("clearAll").addEventListener("click", async () => {
   // The query string makes the browser fetch a fresh copy rather than a cached one.
   location.replace(location.pathname + "?fresh=" + Date.now());
 });
+// Keep the race panel just below the header, whatever height the header is.
+function measureHeader() { document.documentElement.style.setProperty("--head-h", $("go").closest("header").offsetHeight + "px"); }
+measureHeader();
+try { new ResizeObserver(measureHeader).observe(document.querySelector("header.banner")); } catch { addEventListener("resize", measureHeader); }
 showBibInfo(); showRunnerInfo(); showTally(); showPaceInfo(); save();
 </script>
 </body>
