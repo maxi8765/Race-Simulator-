@@ -48,6 +48,7 @@ button, input, select { font: inherit; color: inherit; }
 }
 .banner h1 { margin: 0; font: 700 22px/1 var(--cond); letter-spacing: .02em; }
 .banner p { margin: 4px 0 0; font-size: 14px; }
+.banner p:empty { display: none; }
 .clock { font: 700 clamp(44px, 8vw, 84px)/1 var(--cond); font-variant-numeric: tabular-nums; letter-spacing: .01em; }
 .clock-wrap { display: flex; align-items: center; gap: 14px; }
 .go {
@@ -125,7 +126,7 @@ td.tag { font-family: Consolas, "Courier New", monospace; font-size: 13px; }
 <header class="banner">
   <div>
     <h1>Onetime race simulator</h1>
-    <p id="raceLine">Pretends to be a reader and sends finishes to the cloud in real time.</p>
+    <p id="raceLine"></p>
     <p class="next" id="nextStart" hidden></p>
   </div>
   <div class="clock-wrap">
@@ -842,7 +843,7 @@ $("clearRace").addEventListener("click", () => {
   Object.assign(tally, { finished: 0, confirmed: 0, held: 0, failed: 0 }); showTally();
   $("feed").innerHTML = '<tr><td class="empty" colspan="7">Races deleted. Create runners, import each race into ScoreHound, then start them as the simulator tells you.</td></tr>';
   $("clock").textContent = "00:00:00";
-  $("raceLine").textContent = "Pretends to be a reader and sends finishes to the cloud in real time.";
+  $("raceLine").textContent = "";
   log("Races deleted: finish line and counts cleared.");
 });
 $("clearRunners").addEventListener("click", () => {
