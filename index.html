@@ -505,6 +505,13 @@ function showRunnerInfo() {
   const box = $("downloads");
   box.innerHTML = "";
   if (!runners.length) return;
+  if (races.length > 1) {
+    const all = document.createElement("button");
+    all.className = "btn";
+    all.textContent = `Download all ${races.length} class lists`;
+    all.addEventListener("click", downloadAllClassLists);
+    box.appendChild(all);
+  }
   for (const race of races) {
     const count = runnersIn(race.index).length;
     const b = document.createElement("button");
@@ -547,6 +554,12 @@ function downloadClassList(race) {
   const file = `${race.name.replace(/[^A-Za-z0-9]+/g, "_").replace(/^_|_$/g, "") || "Race"}_class_list.csv`;
   saveFile(file, lines.join("\r\n"));
   log(`Downloaded ${file}. In ScoreHound: Set up a race, then Import a class list.`);
+}
+function downloadAllClassLists() {
+  const list = raceList().filter(r => runnersIn(r.index).length);
+  // A short gap between files; Chrome may ask once to allow multiple downloads.
+  list.forEach((race, i) => setTimeout(() => downloadClassList(race), i * 500));
+  log(`Downloading ${list.length} class lists. If the browser asks, allow multiple downloads.`);
 }
 function downloadBibs() {
   if (!runners.length) createRunners();
