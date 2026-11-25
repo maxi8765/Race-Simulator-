@@ -705,6 +705,8 @@ function planRace() {
     const tag = "fff" + Math.floor(Math.random() * 0xfffffffff).toString(16).padStart(9, "0");
     crossing(fast + Math.random() * (slow - fast + lastOffset), { bib: "", name: "Unknown tag", tag, race: null }, "Unknown tag");
   }
+  // Whole milliseconds, so the time shown is exactly the time stamped on the read.
+  list.forEach(ev => { ev.at = Math.round(ev.at); });
   return list.sort((a, b) => a.at - b.at);
 }
 
