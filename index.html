@@ -127,6 +127,7 @@ td.tag { font-family: Consolas, "Courier New", monospace; font-size: 13px; }
 .hidden-file { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
 label.btn { display: inline-block; }
 .hidden-file:focus-visible + label, label.btn:has(+ .hidden-file:focus-visible) { outline: 2px solid var(--banner); outline-offset: 2px; }
+.field input.saved, .field select.saved { border-color: var(--ok); box-shadow: 0 0 0 2px color-mix(in srgb, var(--ok) 35%, transparent); }
 .btn.danger { color: var(--bad); }
 .btn.danger:hover { border-color: var(--bad); }
 /* Race panel stays on screen while the settings scroll, so every button's result is visible */
@@ -296,6 +297,18 @@ for (const f of fields) {
   const el = $(f);
   if (el.type === "checkbox") el.checked = !!settings[f]; else el.value = settings[f];
   el.addEventListener("change", save);
+  el.addEventListener("change", () => confirmSaved(el));
+  // Enter confirms the field, same as clicking away.
+  if (el.tagName === "INPUT" && el.type !== "checkbox") el.addEventListener("keydown", e => { if (e.key === "Enter") el.blur(); });
+}
+// Say what was saved, so every setting change shows up in the log.
+function confirmSaved(el) {
+  const label = (document.querySelector(`label[for="${el.id}"]`)?.textContent || el.closest("label")?.textContent || el.id).replace(/\s*\(.*\)\s*$/, "").trim();
+  const value = el.type === "checkbox" ? (el.checked ? "on" : "off")
+    : el.type === "password" ? (el.value ? "entered" : "cleared")
+    : el.tagName === "SELECT" ? el.options[el.selectedIndex]?.text : (el.value.trim() || "blank");
+  log(`Saved ${label}: ${value}.`);
+  el.classList.add("saved"); setTimeout(() => el.classList.remove("saved"), 1200);
 }
 let runners = Array.isArray(saved.runners) ? saved.runners : [];
 let bibFile = Array.isArray(saved.bibFile) ? saved.bibFile : []; // [[bib, tag], ...] in file order
