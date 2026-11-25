@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Onetime race simulator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --asphalt: #262c33;
+  --asphalt-2: #2f363e;
+  --line: #434c56;
+  --chalk: #eef1f3;
+  --chalk-dim: #a9b2bb;
+  --banner: #3498b5;
+  --banner-ink: #ffffff;
+  --lane: #5aa3e0;
+  --ok: #5cc28a;
+  --bad: #ef6b6b;
+  --held: #c9a0f0;
+  --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+  --cond: "Barlow Condensed", "Arial Narrow", "Segoe UI", sans-serif;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --asphalt: #f3f4f2; --asphalt-2: #ffffff; --line: #cfd4d8;
+    --chalk: #1f252b; --chalk-dim: #5b6670; --banner: #3498b5; --banner-ink: #ffffff;
+    --lane: #1f6fb2; --ok: #1f8a52; --bad: #c43c3c; --held: #7c4cb8; color-scheme: light;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--asphalt); color: var(--chalk); font: 15px/1.5 var(--body); }
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--banner); outline-offset: 2px; }
+
+/* Finish banner: the race clock is the one loud thing */
+.banner {
+  background: var(--banner); color: var(--banner-ink);
+  display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 16px;
+  padding: 14px clamp(16px, 3vw, 32px);
+  border-bottom: 6px solid var(--banner-ink);
+  background-image: repeating-linear-gradient(90deg, var(--banner-ink) 0 18px, transparent 18px 36px);
+  background-size: 100% 6px; background-repeat: no-repeat; background-position: bottom;
+}
+.banner h1 { margin: 0; font: 700 22px/1 var(--cond); letter-spacing: .02em; }
+.banner p { margin: 4px 0 0; font-size: 14px; }
+.clock { font: 700 clamp(44px, 8vw, 84px)/1 var(--cond); font-variant-numeric: tabular-nums; letter-spacing: .01em; }
+.clock-wrap { display: flex; align-items: center; gap: 14px; }
+.go {
+  border: 0; border-radius: 6px; padding: 12px 22px; cursor: pointer;
+  font: 700 20px/1 var(--cond); background: var(--banner-ink); color: var(--banner);
+}
+.delay { display: grid; gap: 2px; max-width: 150px; font: 600 13px/1.2 var(--body); }
+.delay input { width: 72px; padding: 6px 8px; border-radius: 6px; border: 2px solid var(--banner-ink); background: #ffffff; color: #1f252b; font: 700 18px/1 var(--cond); }
+.go[data-running="true"] { background: #7a1f1f; color: #fff; }
+.go:disabled { opacity: .45; cursor: not-allowed; }
+
+main { display: grid; grid-template-columns: minmax(300px, 380px) 1fr; gap: 20px; padding: 20px clamp(16px, 3vw, 32px) 32px; align-items: start; }
+@media (max-width: 860px) { main { grid-template-columns: 1fr; } }
+
+fieldset { border: 1px solid var(--line); border-radius: 8px; margin: 0 0 16px; padding: 12px 14px 14px; background: var(--asphalt-2); }
+legend { font: 700 17px/1 var(--cond); padding: 0 6px; }
+.field { display: grid; gap: 3px; margin-top: 10px; }
+.field label { font-size: 13px; color: var(--chalk-dim); }
+.field input, .field select {
+  width: 100%; padding: 7px 9px; border-radius: 5px; border: 1px solid var(--line); background: var(--asphalt);
+}
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.check { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 14px; }
+.hint { font-size: 13px; color: var(--chalk-dim); margin: 8px 0 0; }
+.btn {
+  border: 1px solid var(--line); background: var(--asphalt); border-radius: 5px; padding: 8px 12px; cursor: pointer; font-weight: 600;
+}
+.btn:hover { border-color: var(--chalk-dim); }
+.row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+
+.tally { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.tally div { background: var(--asphalt-2); padding: 10px 14px; }
+.tally b { display: block; font: 700 30px/1.1 var(--cond); font-variant-numeric: tabular-nums; }
+.tally span { font-size: 13px; color: var(--chalk-dim); }
+.monitor { display: flex; align-items: center; gap: 8px; margin: 14px 0 6px; font-size: 14px; }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--chalk-dim); flex: none; }
+.dot.ok { background: var(--ok); } .dot.bad { background: var(--bad); } .dot.wait { background: var(--banner); }
+
+h2 { font: 700 20px/1.1 var(--cond); margin: 22px 0 8px; }
+.feed-wrap { border: 1px solid var(--line); border-radius: 8px; max-height: 46vh; overflow: auto; background: var(--asphalt-2); }
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 6px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { position: sticky; top: 0; background: var(--asphalt-2); font-size: 13px; color: var(--chalk-dim); font-weight: 500; }
+td.tag { font-family: Consolas, "Courier New", monospace; font-size: 13px; }
+.st-sent { color: var(--chalk-dim); } .st-ok { color: var(--ok); } .st-bad { color: var(--bad); } .st-held { color: var(--held); }
+.empty { padding: 18px 12px; color: var(--chalk-dim); }
+.log { margin: 0; padding: 10px 12px; height: 180px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--asphalt-2);
+  font: 13px/1.45 Consolas, "Courier New", monospace; white-space: pre-wrap; color: var(--chalk-dim); }
+.btn.danger { color: var(--bad); }
+.btn.danger:hover { border-color: var(--bad); }
+body { padding-bottom: 56px; }
+body.log-open { padding-bottom: calc(38vh + 68px); }
+html { scroll-padding-bottom: 64px; }
+html:has(body.log-open) { scroll-padding-bottom: calc(38vh + 76px); }
+.actions { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; background: var(--asphalt-2); border-top: 3px solid var(--banner); box-shadow: 0 -4px 14px rgba(0,0,0,.25); }
+.actions-bar { display: flex; align-items: center; gap: 12px; padding: 8px clamp(16px, 3vw, 32px); }
+.actions-bar .last { flex: 1; min-width: 0; font: 14px/1.4 Consolas, "Courier New", monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.actions-bar .last.flash { color: var(--banner); }
+.actions .log { display: none; height: 38vh; margin: 0 clamp(16px, 3vw, 32px) 12px; }
+.actions[data-open="true"] .log { display: block; }
+@media (prefers-reduced-motion: no-preference) { .go { transition: background .2s; } .actions-bar .last { transition: color .6s; } }
+</style>
+</head>
+<body>
+
+<header class="banner">
+  <div>
+    <h1>Onetime race simulator</h1>
+    <p id="raceLine">Pretends to be a reader and sends finishes to the cloud in real time.</p>
+  </div>
+  <div class="clock-wrap">
+    <div class="clock" id="clock">00:00:00</div>
+    <label class="delay" for="countdown">Start in seconds from button press<input id="countdown" type="number" min="0" max="120" step="1"></label>
+    <button class="go" id="go">Start race</button>
+  </div>
+</header>
+
+<main>
+  <section aria-label="Setup">
+    <fieldset>
+      <legend>Simulated reader</legend>
+      <div class="field"><label for="readerName">Reader name (use one no real reader has)</label><input id="readerName"></div>
+      <div class="pair">
+        <div class="field"><label for="companyId">Company ID</label><input id="companyId"></div>
+        <div class="field"><label for="readerId">Reader ID</label><input id="readerId" maxlength="1"></div>
+      </div>
+      <div class="field"><label for="hashKey">Hash key for this company</label><input id="hashKey" type="password" autocomplete="off"></div>
+      <div class="field"><label for="appPassword">App password (blank uses the hash key)</label><input id="appPassword" type="password" autocomplete="off"></div>
+      <div class="pair">
+        <div class="field"><label for="offset">UTC offset (seconds)</label><input id="offset" type="number" step="60"></div>
+        <div class="field"><label for="reads">Reads per crossing</label>
+          <select id="reads"><option value="B">Best only</option><option value="BL">Best + last</option><option value="FBL">First, best, last</option></select></div>
+      </div>
+      <div class="field"><label for="server">Cloud server</label><input id="server"></div>
+      <div class="row"><button class="btn" id="testPacket">Send a test read</button></div>
+      <p class="hint">The test read uses tag 999999999999, which no runner has. If it shows as confirmed, the hash key and company ID are right.</p>
+    </fieldset>
+
+    <fieldset>
+      <legend>Runners</legend>
+      <div class="pair">
+        <div class="field"><label for="count">Number of runners</label><input id="count" type="number" min="1" max="2000"></div>
+        <div class="field"><label for="tagStyle">Tag IDs</label>
+          <select id="tagStyle"><option value="dec">Digits (000000001001)</option><option value="hex">Hex (00000db615f0)</option><option value="mix">Half and half</option></select></div>
+      </div>
+      <div class="pair">
+        <div class="field"><label for="distance">Race distance</label><input id="distance" type="number" min="1" step="any"></div>
+        <div class="field"><label for="distUnit">Unit</label>
+          <select id="distUnit"><option value="m">Metres</option><option value="km">Kilometres</option></select></div>
+      </div>
+      <div class="pair">
+        <div class="field"><label for="fastPace">Fastest pace (min:sec per km)</label><input id="fastPace" placeholder="3:00"></div>
+        <div class="field"><label for="slowPace">Slowest pace (min:sec per km)</label><input id="slowPace" placeholder="8:00"></div>
+      </div>
+      <p class="hint" id="paceInfo"></p>
+
+      <div class="pair">
+        <div class="field"><label for="ageMin">Youngest age</label><input id="ageMin" type="number" min="3" max="99"></div>
+        <div class="field"><label for="ageMax">Oldest age</label><input id="ageMax" type="number" min="3" max="99"></div>
+      </div>
+      <div class="row">
+        <button class="btn" id="makeRunners">Create runners</button>
+        <button class="btn" id="downloadCsv">Download for ScoreHound</button>
+      </div>
+      <p class="hint" id="runnerInfo"></p>
+    </fieldset>
+
+    <fieldset>
+      <legend>Things to go wrong</legend>
+      <div class="pair">
+        <div class="field"><label for="unknown">Unknown tags</label><input id="unknown" type="number" min="0"></div>
+        <div class="field"><label for="doubles">Runners crossing twice</label><input id="doubles" type="number" min="0"></div>
+      </div>
+      <div class="field"><label for="burst">Runners finishing in the same second</label><input id="burst" type="number" min="0"></div>
+      <label class="check"><input type="checkbox" id="outageOn"> Reader loses internet during the race</label>
+      <div class="pair">
+        <div class="field"><label for="outageAt">Starting at (seconds into the race)</label><input id="outageAt" type="number" min="0" step="1"></div>
+        <div class="field"><label for="outageFor">For (seconds)</label><input id="outageFor" type="number" min="1"></div>
+      </div>
+      <p class="hint">During the outage, reads are held back and then sent late in one go, as a reader does when it reconnects.</p>
+    </fieldset>
+
+    <fieldset>
+      <legend>Clear out</legend>
+      <div class="row">
+        <button class="btn" id="clearRace">Delete race</button>
+        <button class="btn" id="clearRunners">Delete runners</button>
+        <button class="btn danger" id="clearAll">Delete saved data and reload</button>
+      </div>
+      <p class="hint">Delete race stops any race and clears the finish line and counts. Delete saved data and reload wipes the settings, hash key and runners saved in this browser, then loads a fresh copy of the page.</p>
+    </fieldset>
+  </section>
+
+  <section aria-label="Race">
+    <div class="tally">
+      <div><b id="tFinished">0</b><span>crossings sent</span></div>
+      <div><b id="tConfirmed">0</b><span>packets confirmed</span></div>
+      <div><b id="tHeld">0</b><span>reads held back</span></div>
+      <div><b id="tFailed">0</b><span>packets not seen</span></div>
+    </div>
+    <div class="monitor"><span class="dot" id="monDot"></span><span id="monText">Cloud check not connected</span></div>
+
+    <h2>Finish line</h2>
+    <div class="feed-wrap">
+      <table>
+        <thead><tr><th>Race time</th><th>Bib</th><th>Name</th><th>Tag</th><th>What</th><th>Status</th></tr></thead>
+        <tbody id="feed"><tr><td class="empty" colspan="6">Nobody has finished yet. Create runners, import them into ScoreHound, then start both races together.</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<div class="actions" id="actions" data-open="false">
+  <div class="actions-bar">
+    <span class="last" id="lastAction" aria-live="polite">No actions yet.</span>
+    <button class="btn" id="logToggle" aria-expanded="false" aria-controls="log">Show log</button>
+  </div>
+  <pre class="log" id="log"></pre>
+</div>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const STORE = "onetime-race-simulator";
+const defaults = {
+  readerName: "Test Simulator", companyId: "5", readerId: "S", hashKey: "", appPassword: "",
+  offset: String(-new Date().getTimezoneOffset() * 60), reads: "FBL",
+  server: "https://onetime-ws.onetime-ingest.workers.dev",
+  countdown: "10", count: "50", ageMin: "9", ageMax: "12", tagStyle: "dec", distance: "50", distUnit: "m", fastPace: "3:00", slowPace: "8:00",
+  unknown: "3", doubles: "2", burst: "4", outageOn: false, outageAt: "10", outageFor: "15",
+};
+const fields = Object.keys(defaults);
+
+// ---------- settings ----------
+function load() {
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(STORE) || "{}"); } catch {}
+  return saved;
+}
+const saved = load();
+const settings = Object.assign({}, defaults, saved.settings || {});
+for (const f of fields) {
+  const el = $(f);
+  if (el.type === "checkbox") el.checked = !!settings[f]; else el.value = settings[f];
+  el.addEventListener("change", save);
+}
+let runners = Array.isArray(saved.runners) ? saved.runners : [];
+const serial = saved.serial || ("SIM" + Math.floor(Math.random() * 0xffffffff).toString(16).toUpperCase().padStart(8, "0"));
+function read(f) { const el = $(f); return el.type === "checkbox" ? el.checked : el.value.trim(); }
+function save() {
+  const s = {}; for (const f of fields) s[f] = read(f);
+  try { localStorage.setItem(STORE, JSON.stringify({ settings: s, runners, serial })); } catch {}
+}
+
+// ---------- logging ----------
+function log(text) {
+  const t = new Date().toLocaleTimeString();
+  const el = $("log");
+  el.textContent = `${t}  ${text}\n` + el.textContent;
+  const last = $("lastAction");
+  last.textContent = `${t}  ${text}`; last.title = text;
+  last.classList.add("flash"); clearTimeout(log.flash); log.flash = setTimeout(() => last.classList.remove("flash"), 1500);
+}
+$("logToggle").addEventListener("click", () => {
+  const open = $("actions").dataset.open !== "true";
+  $("actions").dataset.open = String(open);
+  document.body.classList.toggle("log-open", open);
+  $("logToggle").textContent = open ? "Hide log" : "Show log";
+  $("logToggle").setAttribute("aria-expanded", String(open));
+});
+
+// ---------- reader packet format and hash (same as the Worker) ----------
+const MULT = 19820704817n, SEED = 12090758597n, MASK = (1n << 64n) - 1n;
+function hashAdd(h, str) {
+  if (str == null) return h;
+  const s = String(str);
+  for (let i = 0; i < s.length; i++) { h = (h + BigInt(s.charCodeAt(i))) & MASK; h = (h * MULT) & MASK; }
+  return h;
+}
+function timingHash(p, key) {
+  let h = SEED;
+  h = hashAdd(h, p.BoxId); h = hashAdd(h, p.CompanyId); h = hashAdd(h, p.RandomNum);
+  const raw = p.RawTimes || [];
+  h = hashAdd(h, String(raw.length));
+  if (raw.length > 0) h = hashAdd(h, raw[0]);
+  if (raw.length > 1) h = hashAdd(h, raw[raw.length - 1]);
+  h = hashAdd(h, key);
+  return h.toString();
+}
+const pad = (n, w = 2) => String(n).padStart(w, "0");
+function readerDigits(ms, offsetSec) {
+  const d = new Date(ms + offsetSec * 1000);
+  return `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}${pad(d.getUTCMilliseconds(), 3)}`;
+}
+function timeSentNow() {
+  const d = new Date();
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}.${pad(d.getUTCMilliseconds(), 3)}Z`;
+}
+function rawTime(ms, type, tag) {
+  const rid = (read("readerId") || "S").slice(0, 1);
+  return `${rid}1${readerDigits(ms, Number(read("offset")) || 0)}${type}${tag}`;
+}
+function buildPacket(rawTimes) {
+  const p = {
+    "device.serial": serial,
+    BoxId: read("readerName"),
+    CompanyId: read("companyId"),
+    Offset: String(Number(read("offset")) || 0),
+    TimeSent: timeSentNow(),
+    RawTimes: rawTimes,
+  };
+  p.RandomNum = String(Math.floor(Math.random() * 2147483647));
+  p.Hash = timingHash(p, read("hashKey"));
+  return { "device.serial": p["device.serial"], BoxId: p.BoxId, CompanyId: p.CompanyId, Offset: p.Offset,
+    TimeSent: p.TimeSent, RawTimes: p.RawTimes, Hash: p.Hash, RandomNum: p.RandomNum };
+}
+
+// ---------- sending and confirmation ----------
+const pending = new Map(); // RandomNum -> { timer, rows }
+const tally = { finished: 0, confirmed: 0, held: 0, failed: 0 };
+function showTally() {
+  $("tFinished").textContent = tally.finished; $("tConfirmed").textContent = tally.confirmed;
+  $("tHeld").textContent = tally.held; $("tFailed").textContent = tally.failed;
+}
+async function sendPacket(rawTimes, rows = []) {
+  if (!read("hashKey")) { log("No hash key entered. The server would reject every packet."); return; }
+  const packet = buildPacket(rawTimes);
+  const timer = setTimeout(() => {
+    if (!pending.has(packet.RandomNum)) return;
+    pending.delete(packet.RandomNum);
+    tally.failed++; showTally();
+    rows.forEach(r => setStatus(r, "Not seen", "st-bad"));
+    log(`Packet ${packet.RandomNum} not seen back from the cloud within 15 s. If this keeps happening, check the hash key, company ID and app password.`);
+  }, 15000);
+  pending.set(packet.RandomNum, { timer, rows });
+  // No destinations: test data is never forwarded to BBT or the gateway.
+  const url = read("server").replace(/\/+$/, "") + "/ingest?messageType=timing-onetime";
+  try {
+    // text/plain avoids a CORS preflight; the Worker reads the body as JSON regardless.
+    await fetch(url, { method: "POST", mode: "no-cors", headers: { "Content-Type": "text/plain" }, body: JSON.stringify(packet) });
+  } catch (e) {
+    log(`Could not reach the cloud: ${e.message}`);
+  }
+}
+
+let ws = null, wsWanted = false, wsRetry = null, monitorOk = false;
+function setMonitor(state, text) {
+  monitorOk = state === "ok";
+  $("monDot").className = "dot " + state; $("monText").textContent = text;
+}
+function whenMonitorReady(cb) {
+  const until = Date.now() + 6000;
+  (function wait() { if (monitorOk || Date.now() > until) cb(); else setTimeout(wait, 200); })();
+}
+function connectMonitor() {
+  wsWanted = true;
+  if (ws) return;
+  const password = read("appPassword") || read("hashKey");
+  if (!password) { setMonitor("bad", "Cloud check needs the hash key or app password"); return; }
+  const url = read("server").replace(/^http/, "ws").replace(/\/+$/, "");
+  setMonitor("wait", "Connecting cloud check");
+  const sock = new WebSocket(url);
+  ws = sock;
+  sock.onopen = () => sock.send(JSON.stringify({ action: "command", data: {
+    operation: "SUBSCRIBE", deviceIds: read("readerName"), streams: ["TIMING"],
+    companyId: read("companyId"), password } }));
+  sock.onmessage = e => {
+    let d; try { d = JSON.parse(e.data); } catch { return; }
+    if (d.Type === "SUBSCRIBE_OK") { setMonitor("ok", `Cloud check connected to ${read("readerName")}`); return; }
+    if (d.Type === "SUBSCRIBE_FAIL") { setMonitor("bad", `Cloud check rejected: ${d.reason || "check company ID and password"}`); wsWanted = false; sock.close(); return; }
+    if (!Array.isArray(d.RawTimes)) return;
+    const p = pending.get(String(d.RandomNum));
+    if (!p) return;
+    clearTimeout(p.timer); pending.delete(String(d.RandomNum));
+    tally.confirmed++; showTally();
+    p.rows.forEach(r => setStatus(r, "Confirmed", "st-ok"));
+  };
+  sock.onclose = () => {
+    if (ws === sock) ws = null;
+    if (!wsWanted) { setMonitor("", "Cloud check not connected"); return; }
+    setMonitor("bad", "Cloud check dropped, reconnecting");
+    clearTimeout(wsRetry); wsRetry = setTimeout(connectMonitor, 3000);
+  };
+  sock.onerror = () => {};
+}
+function resetMonitor() { wsWanted = false; if (ws) { const s = ws; ws = null; s.close(); } setMonitor("", "Cloud check not connected"); }
+["readerName", "companyId", "hashKey", "appPassword", "server"].forEach(f => $(f).addEventListener("change", () => { resetMonitor(); }));
+
+// ---------- runners ----------
+const GIRLS = ["Ava","Mia","Isla","Zoe","Ruby","Chloe","Grace","Ella","Sienna","Matilda","Harper","Willow","Ivy","Sophie","Maddison","Priya","Mei","Fatima","Sara","Ana","Olivia","Charlotte","Amelia","Evie","Lily","Aria","Hazel","Frankie","Layla","Georgia"];
+const BOYS = ["Liam","Noah","Oliver","Jack","Leo","Henry","Lucas","Max","Cooper","Archie","Ethan","Hudson","Lachlan","Mason","Tom","Arjun","Kenji","Omar","Diego","Kai","William","James","Charlie","Thomas","Harry","Oscar","Hugo","Theo","Levi","Hamish"];
+const LAST = ["Smith","Nguyen","Brown","Wilson","Taylor","Johnson","White","Martin","Anderson","Thompson","Walker","Harris","Lee","Ryan","Robinson","Kelly","King","Davies","Wright","Clarke","Patel","Singh","Chen","Wang","Kim","Murphy","O'Brien","Hughes","Edwards","Green","Hall","Scott","Young","Mitchell","Campbell","Cooper","Ward","Morris","Price","Bell"];
+const pick = a => a[Math.floor(Math.random() * a.length)];
+function makeTag(i, style) {
+  const hex = style === "hex" || (style === "mix" && i % 2 === 1);
+  if (!hex) return String(1000 + i).padStart(12, "0");
+  let t; do { t = Math.floor(Math.random() * 0xffffffffff).toString(16).padStart(12, "0"); } while (!/[a-f]/.test(t));
+  return t;
+}
+function createRunners() {
+  const n = Math.max(1, Math.min(2000, Number(read("count")) || 1));
+  const style = read("tagStyle");
+  const used = new Set(), usedNames = new Set();
+  let ageLo = Math.round(Number(read("ageMin")) || 9), ageHi = Math.round(Number(read("ageMax")) || 12);
+  if (ageHi < ageLo) [ageLo, ageHi] = [ageHi, ageLo];
+  runners = [];
+  for (let i = 1; i <= n; i++) {
+    let tag; do { tag = makeTag(i, style); } while (used.has(tag)); used.add(tag);
+    const gender = Math.random() < 0.5 ? "Male" : "Female";
+    let name, tries = 0;
+    do { name = `${pick(gender === "Male" ? BOYS : GIRLS)} ${pick(LAST)}`; } while (usedNames.has(name) && ++tries < 50);
+    usedNames.add(name);
+    runners.push({ bib: String(i), name, tag,
+      age: String(ageLo + Math.floor(Math.random() * (ageHi - ageLo + 1))), gender, group: String(1 + Math.floor(Math.random() * 4)) });
+  }
+  save(); showRunnerInfo();
+  log(`Created ${n} runners. Download the file and import it into ScoreHound before starting.`);
+}
+function showRunnerInfo() {
+  $("runnerInfo").textContent = runners.length
+    ? `${runners.length} runners ready, tags ${runners[0].tag} onwards. Re-import into ScoreHound if you create them again.`
+    : "No runners yet.";
+}
+function csvCell(v) { const s = String(v ?? ""); return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; }
+function downloadCsv() {
+  if (!runners.length) createRunners();
+  const d = new Date();
+  const date = `${pad(d.getDate())}${pad(d.getMonth() + 1)}${d.getFullYear()}`;
+  const lines = [
+    `"Race Name (e.g. ""Indo Bash"")",Race Date (DDMMYYYY),Race Place (e.g. New York),Race Type(Run/Swim/Cycle/Walk),Race Distance (e.g. 1km),,,,,,,,,,,,,`,
+    [`Simulator Test ${d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`, date, "Test", "Run", `${Number(read("distance")) || 50}${read("distUnit") === "km" ? "km" : "m"}`, ...Array(13).fill("")].map(csvCell).join(","),
+    "Bib No. ,Name,Tag ID,Age ,Gender,Group 1,Group 2,Group 3,Group 4,Race Time,Race Ended,Race  Place (overall) ,Race Place (Age),Race Place (Gender) ,Race Place (Group 1),Race Place (Group 2),Race Place (Group 3),Race Place (Group 4)",
+  ];
+  for (const r of runners) {
+    const g = n => r.group === String(n) ? "YES" : "NO";
+    // ="..." keeps the tag as text if the file is opened in Excel.
+    lines.push([csvCell(r.bib), csvCell(r.name), `="${r.tag}"`, r.age, r.gender, g(1), g(2), g(3), g(4), "", "No", "", "", "", "", "", "", ""].join(","));
+  }
+  const blob = new Blob([lines.join("\r\n")], { type: "text/csv" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = "Simulator_Runners.csv";
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  log("Downloaded Simulator_Runners.csv. Import it into ScoreHound as a new race.");
+}
+
+// ---------- the race ----------
+let running = false, startMs = 0, events = [], clockTimer = null, tickTimer = null, held = [];
+const fmt = ms => { const s = Math.max(0, Math.floor(ms / 1000)); return `${pad(Math.floor(s / 3600))}:${pad(Math.floor(s / 60) % 60)}:${pad(s % 60)}`; };
+
+function paceSeconds(text, fallback) {
+  const m = /^(\d+)(?::(\d{1,2}))?$/.exec(String(text).trim());
+  if (!m) return fallback;
+  return Number(m[1]) * 60 + Number(m[2] || 0);
+}
+function distanceKm() {
+  const d = Math.max(0, Number(read("distance")) || 0);
+  return read("distUnit") === "km" ? d : d / 1000;
+}
+/** Fastest and slowest finish in ms, from distance and pace. */
+function finishWindow() {
+  const km = distanceKm() || 0.05;
+  let fastPace = paceSeconds(read("fastPace"), 180), slowPace = paceSeconds(read("slowPace"), 480);
+  if (slowPace < fastPace) [fastPace, slowPace] = [slowPace, fastPace];
+  const fast = Math.max(1000, km * fastPace * 1000);
+  const slow = Math.max(fast + 1000, km * slowPace * 1000);
+  return { fast, slow };
+}
+function showPaceInfo() {
+  const { fast, slow } = finishWindow();
+  const t = ms => { const s = Math.round(ms / 1000); return s >= 3600 ? fmt(ms) : `${Math.floor(s / 60)}:${pad(s % 60)}`; };
+  $("paceInfo").textContent = `Runners will finish between ${t(fast)} and ${t(slow)} after the start.`;
+}
+["distance", "distUnit", "fastPace", "slowPace"].forEach(f => $(f).addEventListener("input", showPaceInfo));
+function planRace() {
+  const { fast, slow } = finishWindow();
+  const list = [];
+  const crossing = (atMs, who, what) => {
+    const types = read("reads");
+    if (types.includes("F")) list.push({ at: atMs - 400, type: "F", who, what });
+    list.push({ at: atMs, type: "B", who, what });
+    if (types.includes("L")) list.push({ at: atMs + 650, type: "L", who, what });
+  };
+  // Finishes skewed towards the middle of the window, like a real field.
+  const times = runners.map(() => fast + (slow - fast) * ((Math.random() + Math.random() + Math.random()) / 3));
+  const burst = Math.min(Number(read("burst")) || 0, runners.length);
+  if (burst > 1) {
+    const at = fast + (slow - fast) * 0.4;
+    const idx = [...runners.keys()].sort(() => Math.random() - 0.5).slice(0, burst);
+    idx.forEach((i, k) => { times[i] = at + k * 37; });
+  }
+  runners.forEach((r, i) => crossing(times[i], r, "Finish"));
+  const doubles = Math.min(Number(read("doubles")) || 0, runners.length);
+  [...runners.keys()].sort(() => Math.random() - 0.5).slice(0, doubles)
+    .forEach(i => crossing(times[i] + Math.max(5000, (slow - fast) * (0.3 + Math.random() * 0.5)), runners[i], "Crossed again"));
+  for (let u = 0; u < (Number(read("unknown")) || 0); u++) {
+    const tag = "fff" + Math.floor(Math.random() * 0xfffffffff).toString(16).padStart(9, "0");
+    crossing(fast + Math.random() * (slow - fast), { bib: "", name: "Unknown tag", tag }, "Unknown tag");
+  }
+  return list.sort((a, b) => a.at - b.at);
+}
+
+function addRow(ev, status, cls) {
+  const tbody = $("feed");
+  if (tbody.querySelector(".empty")) tbody.innerHTML = "";
+  const tr = document.createElement("tr");
+  const cells = [fmt(ev.at), ev.who.bib, ev.who.name, ev.who.tag, ev.what, status];
+  cells.forEach((c, i) => { const td = document.createElement("td"); td.textContent = c; if (i === 3) td.className = "tag"; if (i === 5) td.className = cls; tr.appendChild(td); });
+  tbody.prepend(tr);
+  return tr.lastChild;
+}
+function setStatus(cell, text, cls) { if (cell) { cell.textContent = text; cell.className = cls; } }
+
+function inOutage(elapsed) {
+  if (!read("outageOn")) return false;
+  const from = (Number(read("outageAt")) || 0) * 1000;
+  return elapsed >= from && elapsed < from + (Number(read("outageFor")) || 0) * 1000;
+}
+
+function tick() {
+  const elapsed = Date.now() - startMs;
+  const due = [];
+  while (events.length && events[0].at <= elapsed) due.push(events.shift());
+  if (due.length) {
+    if (inOutage(elapsed)) {
+      for (const ev of due) {
+        held.push(ev); tally.held++;
+        if (ev.type === "B") ev.cell = addRow(ev, "Held", "st-held");
+      }
+      if (!held.outageLogged) { log("Reader outage: reads are being held back."); held.outageLogged = true; }
+      showTally();
+    } else {
+      sendBatch(due);
+    }
+  }
+  if (held.length && !inOutage(elapsed)) {
+    log(`Outage over: sending ${held.length} held reads late.`);
+    const backlog = held.splice(0); held.outageLogged = false;
+    tally.held = 0; showTally();
+    sendBatch(backlog, true);
+  }
+  if (!events.length && !held.length && running) {
+    log("All runners have crossed. Press Stop when you are done.");
+    clearInterval(tickTimer); tickTimer = null;
+  }
+}
+
+function sendBatch(evs, late = false) {
+  // Up to 10 reads per packet, like the reader.
+  for (let i = 0; i < evs.length; i += 10) {
+    const chunk = evs.slice(i, i + 10);
+    const rows = [];
+    for (const ev of chunk) {
+      if (ev.type !== "B") continue;
+      tally.finished++;
+      if (ev.cell) { setStatus(ev.cell, "Sent late", "st-sent"); rows.push(ev.cell); }
+      else rows.push(addRow(ev, late ? "Sent late" : "Sent", "st-sent"));
+    }
+    sendPacket(chunk.map(ev => rawTime(startMs + ev.at, ev.type, ev.who.tag)), rows);
+  }
+  showTally();
+}
+
+let countdownTimer = null, countingDown = false, audioCtx = null;
+function beep(ms, freq) {
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
+    osc.frequency.value = freq; gain.gain.value = 0.15;
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    osc.start(); osc.stop(audioCtx.currentTime + ms / 1000);
+  } catch {}
+}
+function startRace() {
+  if (!read("hashKey")) { log("Enter the hash key first."); $("hashKey").focus(); return; }
+  if (!runners.length) { log("Create runners and import them into ScoreHound first."); return; }
+  connectMonitor();
+  const secs = Math.max(0, Math.min(120, Math.round(Number(read("countdown")) || 0)));
+  if (!secs) { beep(700, 880); beginRace(); return; }
+  countingDown = true;
+  const gunAt = Date.now() + secs * 1000;
+  let lastWhole = null;
+  $("go").textContent = "Cancel"; $("go").dataset.running = "true";
+  $("raceLine").textContent = `Gun in ${secs} seconds. Press Start Race in ScoreHound on the long beep.`;
+  log(`Countdown started: ${secs} s to the gun.`);
+  countdownTimer = setInterval(() => {
+    const left = gunAt - Date.now();
+    if (left <= 0) {
+      clearInterval(countdownTimer); countdownTimer = null; countingDown = false;
+      beep(700, 880); beginRace(); return;
+    }
+    const whole = Math.ceil(left / 1000);
+    $("clock").textContent = "-" + fmt(whole * 1000);
+    if (whole !== lastWhole) { lastWhole = whole; if (whole <= 3) beep(120, 660); }
+  }, 100);
+}
+function cancelCountdown() {
+  clearInterval(countdownTimer); countdownTimer = null; countingDown = false;
+  $("clock").textContent = "00:00:00";
+  $("go").textContent = "Start race"; $("go").dataset.running = "false";
+  $("raceLine").textContent = "Countdown cancelled.";
+  log("Countdown cancelled.");
+}
+function beginRace() {
+  events = planRace(); held = []; held.outageLogged = false;
+  Object.assign(tally, { finished: 0, confirmed: 0, held: 0, failed: 0 }); showTally();
+  $("feed").innerHTML = "";
+  startMs = Date.now(); running = true;
+  const crossings = events.filter(e => e.type === "B").length;
+  $("raceLine").textContent = `Race started ${new Date(startMs).toLocaleTimeString()}. ${crossings} crossings planned.`;
+  log(`GUN. Race started. Reader ${read("readerName")}, offset ${read("offset")} s.`);
+  $("go").textContent = "Stop"; $("go").dataset.running = "true";
+  clockTimer = setInterval(() => { $("clock").textContent = fmt(Date.now() - startMs); }, 200);
+  tickTimer = setInterval(tick, 250);
+}
+function stopRace() {
+  running = false; clearInterval(clockTimer); clearInterval(tickTimer); clockTimer = tickTimer = null;
+  if (held.length) log(`Stopped with ${held.length} held reads never sent.`);
+  events = []; held = [];
+  $("go").textContent = "Start race"; $("go").dataset.running = "false";
+  $("raceLine").textContent = "Stopped. Start again for a fresh race (create runners again if ScoreHound has finished them).";
+  log("Race stopped.");
+}
+
+$("go").addEventListener("click", () => countingDown ? cancelCountdown() : running ? stopRace() : startRace());
+$("makeRunners").addEventListener("click", createRunners);
+$("downloadCsv").addEventListener("click", downloadCsv);
+$("testPacket").addEventListener("click", () => {
+  if (!read("hashKey")) { log("Enter the hash key first."); $("hashKey").focus(); return; }
+  connectMonitor();
+  const ev = { at: 0, who: { bib: "", name: "Test read", tag: "999999999999" }, what: "Test" };
+  const cell = addRow(ev, "Sent", "st-sent");
+  whenMonitorReady(() => sendPacket([rawTime(Date.now(), "B", "999999999999")], [cell]));
+  log("Test read sent. Watch for Confirmed.");
+});
+function clearPending() { for (const p of pending.values()) clearTimeout(p.timer); pending.clear(); }
+$("clearRace").addEventListener("click", () => {
+  if (countingDown) cancelCountdown();
+  if (running) stopRace();
+  clearPending();
+  Object.assign(tally, { finished: 0, confirmed: 0, held: 0, failed: 0 }); showTally();
+  $("feed").innerHTML = '<tr><td class="empty" colspan="6">Race deleted. Create runners, import them into ScoreHound, then start both races together.</td></tr>';
+  $("clock").textContent = "00:00:00";
+  $("raceLine").textContent = "Pretends to be a reader and sends finishes to the cloud in real time.";
+  log("Race deleted: finish line and counts cleared.");
+});
+$("clearRunners").addEventListener("click", () => {
+  if (running || countingDown) { log("Stop the race before deleting runners."); return; }
+  runners = []; save(); showRunnerInfo();
+  log("Runners deleted. Create new runners and re-import them into ScoreHound.");
+});
+$("clearAll").addEventListener("click", async () => {
+  if (!confirm("Delete all saved settings, the hash key and runners from this browser, then reload?")) return;
+  if (countingDown) cancelCountdown();
+  if (running) stopRace();
+  clearPending(); resetMonitor();
+  try { localStorage.removeItem(STORE); } catch {}
+  try { if (window.caches) for (const k of await caches.keys()) await caches.delete(k); } catch {}
+  // The query string makes the browser fetch a fresh copy rather than a cached one.
+  location.replace(location.pathname + "?fresh=" + Date.now());
+});
+showRunnerInfo(); showTally(); showPaceInfo(); save();
+</script>
+</body>
+</html>
