@@ -111,6 +111,18 @@ td.tag { font-family: Consolas, "Courier New", monospace; font-size: 13px; }
 .cue .cue-say { font: 700 clamp(20px, 3vw, 32px)/1.2 var(--cond); max-width: 22ch; }
 .cue.go-now { background: #1f9d55; color: #fff; }
 .cue button { margin-top: 8px; padding: 10px 18px; border-radius: 8px; border: 2px solid currentColor; background: transparent; color: inherit; font: 700 18px/1 var(--cond); cursor: pointer; }
+.lanes { display: grid; gap: 8px; margin-top: 14px; }
+.lane { display: grid; grid-template-columns: minmax(120px, 1.2fr) 112px 3fr 110px; align-items: center; gap: 12px; padding: 8px 12px;
+  background: var(--asphalt-2); border: 1px solid var(--line); border-left: 6px solid var(--line); border-radius: 8px; }
+.lane[data-state="running"] { border-left-color: var(--banner); }
+.lane[data-state="done"] { border-left-color: var(--ok); }
+.lane-name { font: 700 17px/1.1 var(--cond); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lane-clock { white-space: nowrap; font: 700 22px/1 var(--cond); font-variant-numeric: tabular-nums; }
+.lane-bar { height: 10px; background: var(--asphalt); border: 1px solid var(--line); border-radius: 5px; overflow: hidden; }
+.lane-bar i { display: block; height: 100%; width: 0; background: var(--banner); }
+.lane[data-state="done"] .lane-bar i { background: var(--ok); }
+.lane-count { font-size: 13px; color: var(--chalk-dim); text-align: right; font-variant-numeric: tabular-nums; }
+@media (max-width: 600px) { .lane { grid-template-columns: 1fr auto; } .lane-bar { grid-column: 1 / -1; } }
 .btn.danger { color: var(--bad); }
 .btn.danger:hover { border-color: var(--bad); }
 /* Race panel stays on screen while the settings scroll, so every button's result is visible */
@@ -237,6 +249,7 @@ td.tag { font-family: Consolas, "Courier New", monospace; font-size: 13px; }
       <div><b id="tHeld">0</b><span>reads held back</span></div>
       <div><b id="tFailed">0</b><span>packets not seen</span></div>
     </div>
+    <div class="lanes" id="lanes" aria-label="Races"></div>
     <div class="monitor"><span class="dot" id="monDot"></span><span id="monText">Cloud check not connected</span></div>
 
     <h2>Finish line</h2>
@@ -498,6 +511,7 @@ function createRunners() {
 }
 function runnersIn(race) { return runners.filter(r => (r.race ?? 0) === race); }
 function showRunnerInfo() {
+  setTimeout(renderLanes);
   const races = raceList();
   $("runnerInfo").textContent = runners.length
     ? `${runners.length} runners ready. Re-import into ScoreHound if you create them again.`
@@ -570,7 +584,29 @@ function downloadBibs() {
 
 // ---------- the race ----------
 let running = false, startMs = 0, events = [], clockTimer = null, tickTimer = null, held = [];
-let plannedRaces = [], announced = new Set();
+let plannedRaces = [], announced = new Set(), finishedIn = {};
+// One lane per race: its own clock and how many of its runners have finished.
+function renderLanes() {
+  const box = $("lanes");
+  const races = running ? plannedRaces : raceList();
+  if (!runners.length && !running) { box.innerHTML = ""; return; }
+  if (box.children.length !== races.length) {
+    box.innerHTML = races.map(() => '<div class="lane"><span class="lane-name"></span><span class="lane-clock"></span><span class="lane-bar"><i></i></span><span class="lane-count"></span></div>').join("");
+  }
+  const elapsed = running ? Date.now() - startMs : -1;
+  races.forEach((race, i) => {
+    const lane = box.children[i];
+    const total = runnersIn(race.index).length;
+    const done = running ? (finishedIn[race.index] || 0) : 0;
+    const since = elapsed - race.offset;
+    const state = !running ? "idle" : since < 0 ? "waiting" : done >= total && total ? "done" : "running";
+    lane.dataset.state = state;
+    lane.children[0].textContent = race.name;
+    lane.children[1].textContent = !running ? (race.offset ? "+" + fmt(race.offset) : "Gun") : since < 0 ? "-" + fmt(-since + 999) : fmt(since);
+    lane.children[2].firstChild.style.width = total ? `${Math.min(100, (done / total) * 100)}%` : "0";
+    lane.children[3].textContent = state === "done" ? `All ${total} in` : `${done} / ${total} finished`;
+  });
+}
 const fmt = ms => { const s = Math.max(0, Math.floor(ms / 1000)); return `${pad(Math.floor(s / 3600))}:${pad(Math.floor(s / 60) % 60)}:${pad(s % 60)}`; };
 
 function paceSeconds(text, fallback) {
@@ -705,6 +741,7 @@ function sendBatch(evs, late = false) {
     for (const ev of chunk) {
       if (ev.type !== "B") continue;
       tally.finished++;
+      if (ev.what === "Finish" && ev.who.race != null) finishedIn[ev.who.race] = (finishedIn[ev.who.race] || 0) + 1;
       if (ev.cell) { setStatus(ev.cell, "Sent late", "st-sent"); rows.push(ev.cell); }
       else rows.push(addRow(ev, late ? "Sent late" : "Sent", "st-sent"));
     }
@@ -811,7 +848,7 @@ function cancelCountdown() {
   log("Countdown cancelled.");
 }
 function beginRace() {
-  plannedRaces = raceList(); announced = new Set();
+  plannedRaces = raceList(); announced = new Set(); finishedIn = {};
   events = planRace(); held = []; held.outageLogged = false;
   Object.assign(tally, { finished: 0, confirmed: 0, held: 0, failed: 0 }); showTally();
   $("feed").innerHTML = "";
@@ -821,11 +858,11 @@ function beginRace() {
   log(`GUN. ${plannedRaces[0].name} started. Reader ${read("readerName")}, offset ${read("offset")} s.`);
   announceStarts(0);
   $("go").textContent = "Stop"; $("go").dataset.running = "true";
-  clockTimer = setInterval(() => { $("clock").textContent = fmt(Date.now() - startMs); }, 200);
+  clockTimer = setInterval(() => { $("clock").textContent = fmt(Date.now() - startMs); renderLanes(); }, 200);
   tickTimer = setInterval(tick, 250);
 }
 function stopRace() {
-  running = false; clearInterval(clockTimer); clearInterval(tickTimer); clockTimer = tickTimer = null; hideCue();
+  running = false; setTimeout(renderLanes); clearInterval(clockTimer); clearInterval(tickTimer); clockTimer = tickTimer = null; hideCue();
   $("nextStart").hidden = true;
   if (held.length) log(`Stopped with ${held.length} held reads never sent.`);
   events = []; held = [];
