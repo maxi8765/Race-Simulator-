@@ -123,6 +123,10 @@ td.tag { font-family: Consolas, "Courier New", monospace; font-size: 13px; }
 .lane[data-state="done"] .lane-bar i { background: var(--ok); }
 .lane-count { font-size: 13px; color: var(--chalk-dim); text-align: right; font-variant-numeric: tabular-nums; }
 @media (max-width: 600px) { .lane { grid-template-columns: 1fr auto; } .lane-bar { grid-column: 1 / -1; } }
+.field-label { font-size: 13px; color: var(--chalk-dim); }
+.hidden-file { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
+label.btn { display: inline-block; }
+.hidden-file:focus-visible + label, label.btn:has(+ .hidden-file:focus-visible) { outline: 2px solid var(--banner); outline-offset: 2px; }
 .btn.danger { color: var(--bad); }
 .btn.danger:hover { border-color: var(--bad); }
 /* Race panel stays on screen while the settings scroll, so every button's result is visible */
@@ -179,7 +183,8 @@ td.tag { font-family: Consolas, "Courier New", monospace; font-size: 13px; }
 
     <fieldset>
       <legend>Runners</legend>
-      <div class="field"><label for="bibFile">Bib file (optional): runners get these numbers and tags</label><input id="bibFile" type="file" accept=".csv,text/csv"></div>
+      <div class="field"><span class="field-label">Bib file (optional): runners get these numbers and tags</span>
+        <div class="row" style="margin-top:2px"><label class="btn" for="bibFile" id="bibPick">Choose bib file</label><input id="bibFile" class="hidden-file" type="file" accept=".csv,text/csv"></div></div>
       <p class="hint" id="bibInfo"></p>
       <div class="row" id="bibForgetRow" hidden><button class="btn" id="forgetBibs">Stop using this bib file</button></div>
       <div class="pair">
@@ -294,11 +299,12 @@ for (const f of fields) {
 }
 let runners = Array.isArray(saved.runners) ? saved.runners : [];
 let bibFile = Array.isArray(saved.bibFile) ? saved.bibFile : []; // [[bib, tag], ...] in file order
+let bibName = saved.bibName || "";
 const serial = saved.serial || ("SIM" + Math.floor(Math.random() * 0xffffffff).toString(16).toUpperCase().padStart(8, "0"));
 function read(f) { const el = $(f); return el.type === "checkbox" ? el.checked : el.value.trim(); }
 function save() {
   const s = {}; for (const f of fields) s[f] = read(f);
-  try { localStorage.setItem(STORE, JSON.stringify({ settings: s, runners, serial, bibFile })); } catch {}
+  try { localStorage.setItem(STORE, JSON.stringify({ settings: s, runners, serial, bibFile, bibName })); } catch {}
 }
 
 // ---------- logging ----------
@@ -458,9 +464,10 @@ function parseBibCsv(text) {
 }
 function showBibInfo() {
   $("bibInfo").textContent = bibFile.length
-    ? `Using a bib file with ${bibFile.length} bibs (${bibFile[0][0]} to ${bibFile[bibFile.length - 1][0]}). Load the same file into ScoreHound.`
+    ? `Using ${bibName || "a bib file"}: ${bibFile.length} bibs (${bibFile[0][0]} to ${bibFile[bibFile.length - 1][0]}). Load the same file into ScoreHound.`
     : "No bib file: runners are numbered from 1 and get made-up tags. Use Download bib file and load it into ScoreHound.";
   $("bibForgetRow").hidden = !bibFile.length;
+  $("bibPick").textContent = bibFile.length ? "Choose a different bib file" : "Choose bib file";
 }
 $("bibFile").addEventListener("change", e => {
   const file = e.target.files && e.target.files[0];
@@ -468,12 +475,12 @@ $("bibFile").addEventListener("change", e => {
   file.text().then(text => {
     const parsed = parseBibCsv(text);
     if (!parsed.length) { log(`${file.name} has no bib and tag rows. It should have two columns: bib number, then tag ID.`); return; }
-    bibFile = parsed; save(); showBibInfo();
+    bibFile = parsed; bibName = file.name; save(); showBibInfo();
     log(`Loaded ${parsed.length} bibs from ${file.name}. Create runners again to use them.`);
   });
   e.target.value = "";
 });
-$("forgetBibs").addEventListener("click", () => { bibFile = []; save(); showBibInfo(); log("Bib file forgotten. Create runners again to use made-up tags."); });
+$("forgetBibs").addEventListener("click", () => { bibFile = []; bibName = ""; save(); showBibInfo(); log("Bib file forgotten. Create runners again to use made-up tags."); });
 
 // ---------- runners ----------
 function createRunners() {
