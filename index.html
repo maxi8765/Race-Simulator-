@@ -196,7 +196,7 @@ label.btn { display: inline-block; }
         <div class="field"><label for="raceCount">Number of races</label><input id="raceCount" type="number" min="1" max="12"></div>
         <div class="field"><label for="raceGap">Seconds between starts</label><input id="raceGap" type="number" min="0" step="1"></div>
       </div>
-      <div class="field"><label for="raceNames">Race names, in start order (comma separated)</label><input id="raceNames" placeholder="Year 3, Year 4, Year 5"></div>
+      <div class="field"><label for="raceNames">Race names, in start order (comma separated)</label><input id="raceNames" placeholder="Blank gives Race 1, Race 2, Race 3"></div>
       <p class="hint">Runners are split between the races, youngest in the first race. Each race starts its own clock, so start each one in ScoreHound when the simulator says.</p>
       <div class="pair">
         <div class="field"><label for="distance">Race distance</label><input id="distance" type="number" min="1" step="any"></div>
@@ -280,7 +280,7 @@ const defaults = {
   server: "https://onetime-ws.onetime-ingest.workers.dev",
   countdown: "10", count: "50", ageMin: "9", ageMax: "12", tagStyle: "dec", distance: "50", distUnit: "m", fastPace: "3:00", slowPace: "8:00",
   unknown: "3", doubles: "2", burst: "4", outageOn: false, outageAt: "10", outageFor: "15",
-  spoken: true, raceCount: "3", raceGap: "60", raceNames: "Year 3 Cross Country, Year 4 Cross Country, Year 5 Cross Country",
+  spoken: true, raceCount: "3", raceGap: "60", raceNames: "",
 };
 const fields = Object.keys(defaults);
 
@@ -516,7 +516,7 @@ function createRunners() {
       age: String(bandLo + Math.floor(Math.random() * (bandHi - bandLo + 1))), gender, group: String(1 + Math.floor(Math.random() * 4)) });
   }
   save(); showRunnerInfo();
-  log(`Created ${n} runners in ${races.length} race${races.length === 1 ? "" : "s"}. Download each race's class list and import it into ScoreHound.`);
+  log(`Created ${n} runners in ${races.length} race${races.length === 1 ? "" : "s"}. Download each race's entry list and import it into ScoreHound.`);
 }
 function runnersIn(race) { return runners.filter(r => (r.race ?? 0) === race); }
 function showRunnerInfo() {
@@ -531,17 +531,17 @@ function showRunnerInfo() {
   if (races.length > 1) {
     const all = document.createElement("button");
     all.className = "btn";
-    all.textContent = `Download all ${races.length} class lists`;
-    all.addEventListener("click", downloadAllClassLists);
+    all.textContent = `Download all ${races.length} entry lists`;
+    all.addEventListener("click", downloadAllEntryLists);
     box.appendChild(all);
   }
   for (const race of races) {
     const count = runnersIn(race.index).length;
     const b = document.createElement("button");
     b.className = "btn";
-    b.textContent = `Download class list: ${race.name} (${count} runners)`;
+    b.textContent = `Download entry list: ${race.name} (${count} runners)`;
     b.disabled = !count;
-    b.addEventListener("click", () => downloadClassList(race));
+    b.addEventListener("click", () => downloadEntryList(race));
     box.appendChild(b);
   }
 }
@@ -553,12 +553,12 @@ function saveFile(name, text) {
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 function distanceText() { return { value: String(Number(read("distance")) || 50), unit: read("distUnit") === "km" ? "km" : "m" }; }
-function downloadClassList(race) {
+function downloadEntryList(race) {
   const list = runnersIn(race.index);
   const d = new Date();
   const dist = distanceText();
   const lines = [];
-    // Same labels as ScoreHound's downloadable class list template.
+    // Same labels as ScoreHound's downloadable entry list template.
     const detail = [
       ["Race details (all optional)", ""],
       ["Race name", race.name],
@@ -574,15 +574,15 @@ function downloadClassList(race) {
     ];
     for (const row of detail) lines.push(row.map(csvCell).join(","));
     for (const r of list) lines.push([r.bib, r.name, r.age, r.gender, r.group].map(csvCell).join(","));
-  const file = `${race.name.replace(/[^A-Za-z0-9]+/g, "_").replace(/^_|_$/g, "") || "Race"}_class_list.csv`;
+  const file = `${race.name.replace(/[^A-Za-z0-9]+/g, "_").replace(/^_|_$/g, "") || "Race"}_entry_list.csv`;
   saveFile(file, lines.join("\r\n"));
-  log(`Downloaded ${file}. In ScoreHound: Set up a race, then Import a class list.`);
+  log(`Downloaded ${file}. In ScoreHound: Set up a race, then import this file.`);
 }
-function downloadAllClassLists() {
+function downloadAllEntryLists() {
   const list = raceList().filter(r => runnersIn(r.index).length);
   // A short gap between files; Chrome may ask once to allow multiple downloads.
-  list.forEach((race, i) => setTimeout(() => downloadClassList(race), i * 500));
-  log(`Downloading ${list.length} class lists. If the browser asks, allow multiple downloads.`);
+  list.forEach((race, i) => setTimeout(() => downloadEntryList(race), i * 500));
+  log(`Downloading ${list.length} entry lists. If the browser asks, allow multiple downloads.`);
 }
 function downloadBibs() {
   if (!runners.length) createRunners();
@@ -911,7 +911,7 @@ $("clearRace").addEventListener("click", () => {
 $("clearRunners").addEventListener("click", () => {
   if (running || countingDown) { log("Stop the race before deleting runners."); return; }
   runners = []; save(); showRunnerInfo();
-  log("Runners deleted. Create new runners and re-import the class lists into ScoreHound.");
+  log("Runners deleted. Create new runners and re-import the entry lists into ScoreHound.");
 });
 $("clearAll").addEventListener("click", async () => {
   if (!confirm("Delete all saved settings, the hash key, bib file and runners from this browser, then reload?")) return;
