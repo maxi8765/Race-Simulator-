@@ -495,7 +495,7 @@ function createRunners() {
   let ageLo = Math.round(Number(read("ageMin")) || 9), ageHi = Math.round(Number(read("ageMax")) || 12);
   if (ageHi < ageLo) [ageLo, ageHi] = [ageHi, ageLo];
   const span = ageHi - ageLo + 1;
-  runners = [];
+  runners = []; lanesCleared = false;
   for (let i = 1; i <= n; i++) {
     let bib, tag;
     if (bibFile.length) { [bib, tag] = bibFile[i - 1]; }
@@ -591,12 +591,12 @@ function downloadBibs() {
 
 // ---------- the race ----------
 let running = false, startMs = 0, events = [], clockTimer = null, tickTimer = null, held = [];
-let plannedRaces = [], announced = new Set(), finishedIn = {};
+let plannedRaces = [], announced = new Set(), finishedIn = {}, lanesCleared = false;
 // One lane per race: its own clock and how many of its runners have finished.
 function renderLanes() {
   const box = $("lanes");
   const races = running ? plannedRaces : raceList();
-  if (!runners.length && !running) { box.innerHTML = ""; return; }
+  if ((!runners.length || lanesCleared) && !running) { box.innerHTML = ""; return; }
   if (box.children.length !== races.length) {
     box.innerHTML = races.map(() => '<div class="lane"><span class="lane-name"></span><span class="lane-clock"></span><span class="lane-bar"><i></i></span><span class="lane-count"></span></div>').join("");
   }
@@ -855,7 +855,7 @@ function cancelCountdown() {
   log("Countdown cancelled.");
 }
 function beginRace() {
-  plannedRaces = raceList(); announced = new Set(); finishedIn = {};
+  plannedRaces = raceList(); announced = new Set(); finishedIn = {}; lanesCleared = false;
   events = planRace(); held = []; held.outageLogged = false;
   Object.assign(tally, { finished: 0, confirmed: 0, held: 0, failed: 0 }); showTally();
   $("feed").innerHTML = "";
@@ -897,6 +897,7 @@ $("clearRace").addEventListener("click", () => {
   if (countingDown) cancelCountdown();
   if (running) stopRace();
   hideCue(); clearPending(); $("nextStart").hidden = true;
+  finishedIn = {}; lanesCleared = true; renderLanes();
   Object.assign(tally, { finished: 0, confirmed: 0, held: 0, failed: 0 }); showTally();
   $("feed").innerHTML = '<tr><td class="empty" colspan="7">Races deleted. Create runners, import each race into ScoreHound, then start them as the simulator tells you.</td></tr>';
   $("clock").textContent = "00:00:00";
