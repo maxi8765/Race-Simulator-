@@ -166,7 +166,7 @@ label.btn { display: inline-block; }
       <legend>Simulated reader</legend>
       <div class="field"><label for="readerName">Reader name (use one no real reader has)</label><input id="readerName"></div>
       <div class="pair">
-        <div class="field"><label for="companyId">Company ID</label><input id="companyId"></div>
+        <div class="field"><label for="companyId">Company ID</label><input id="companyId" inputmode="numeric" placeholder="Your company ID"></div>
         <div class="field"><label for="readerId">Reader ID</label><input id="readerId" maxlength="1"></div>
       </div>
       <div class="field"><label for="hashKey">Hash key for this company</label><input id="hashKey" type="password" autocomplete="off"></div>
@@ -275,7 +275,7 @@ label.btn { display: inline-block; }
 const $ = id => document.getElementById(id);
 const STORE = "onetime-race-simulator";
 const defaults = {
-  readerName: "Test Simulator", companyId: "5", readerId: "S", hashKey: "", appPassword: "",
+  readerName: "Test Simulator", companyId: "", readerId: "S", hashKey: "", appPassword: "",
   offset: String(-new Date().getTimezoneOffset() * 60), reads: "FBL",
   server: "https://onetime-ws.onetime-ingest.workers.dev",
   countdown: "10", count: "50", ageMin: "9", ageMax: "12", tagStyle: "dec", distance: "50", distUnit: "m", fastPace: "3:00", slowPace: "8:00",
@@ -369,6 +369,7 @@ function showTally() {
   $("tHeld").textContent = tally.held; $("tFailed").textContent = tally.failed;
 }
 async function sendPacket(rawTimes, rows = []) {
+  if (!read("companyId")) { log("No company ID entered."); return; }
   if (!read("hashKey")) { log("No hash key entered. The server would reject every packet."); return; }
   const packet = buildPacket(rawTimes);
   const timer = setTimeout(() => {
@@ -403,6 +404,7 @@ function connectMonitor() {
   if (ws) return;
   const password = read("appPassword") || read("hashKey");
   if (!password) { setMonitor("bad", "Cloud check needs the hash key or app password"); return; }
+  if (!read("companyId")) { setMonitor("bad", "Cloud check needs the company ID"); return; }
   const url = read("server").replace(/^http/, "ws").replace(/\/+$/, "");
   setMonitor("wait", "Connecting cloud check");
   const sock = new WebSocket(url);
@@ -525,7 +527,7 @@ function showRunnerInfo() {
     : "No runners yet.";
   const box = $("downloads");
   box.innerHTML = "";
-  if (!runners.length) return;
+  if (!runners.length || lanesCleared) return;
   if (races.length > 1) {
     const all = document.createElement("button");
     all.className = "btn";
@@ -819,6 +821,7 @@ function beep(ms, freq) {
   } catch {}
 }
 function startRace() {
+  if (!read("companyId")) { log("Enter your company ID first."); $("companyId").focus(); return; }
   if (!read("hashKey")) { log("Enter the hash key first."); $("hashKey").focus(); return; }
   if (!runners.length) { log("Create runners and import them into ScoreHound first."); return; }
   if (runners.some(r => (r.race ?? 0) >= raceList().length)) { log("The number of races changed since the runners were made. Create runners again and re-import them."); return; }
@@ -885,6 +888,7 @@ document.addEventListener("keydown", e => { if (e.key === "Escape") hideCue(); }
 $("downloadBibs").addEventListener("click", downloadBibs);
 ["raceCount", "raceNames"].forEach(f => $(f).addEventListener("change", showRunnerInfo));
 $("testPacket").addEventListener("click", () => {
+  if (!read("companyId")) { log("Enter your company ID first."); $("companyId").focus(); return; }
   if (!read("hashKey")) { log("Enter the hash key first."); $("hashKey").focus(); return; }
   connectMonitor();
   const ev = { at: 0, who: { bib: "", name: "Test read", tag: "999999999999", race: null }, what: "Test" };
@@ -897,7 +901,7 @@ $("clearRace").addEventListener("click", () => {
   if (countingDown) cancelCountdown();
   if (running) stopRace();
   hideCue(); clearPending(); $("nextStart").hidden = true;
-  finishedIn = {}; lanesCleared = true; renderLanes();
+  finishedIn = {}; lanesCleared = true; renderLanes(); showRunnerInfo();
   Object.assign(tally, { finished: 0, confirmed: 0, held: 0, failed: 0 }); showTally();
   $("feed").innerHTML = '<tr><td class="empty" colspan="7">Races deleted. Create runners, import each race into ScoreHound, then start them as the simulator tells you.</td></tr>';
   $("clock").textContent = "00:00:00";
